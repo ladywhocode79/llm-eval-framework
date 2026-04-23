@@ -12,6 +12,8 @@
 5. [The LLM App We Are Testing](#5-the-llm-app-we-are-testing)
 6. [The Eval Framework](#6-the-eval-framework)
 7. [Types of Metrics Explained](#7-types-of-metrics-explained)
+   - [7.6 Local LLM Judge — Ollama](#76-local-llm-judge--ollama-cost-free-evaluation)
+   - [7.7 Known Failure: JSONDecodeError with Local Models](#77-known-failure-jsondecodeerror-with-local-models)
 8. [Test Files — Line by Line Walkthrough](#8-test-files--line-by-line-walkthrough)
 9. [The Test Dataset](#9-the-test-dataset)
 10. [How to Run the Tests](#10-how-to-run-the-tests)
@@ -393,6 +395,182 @@ hallucinated = output_numbers - context_numbers
 
 ---
 
+## 7.6 Local LLM Judge — Ollama (Cost-Free Evaluation)
+
+### The Problem with Cloud-Based Judges
+
+By default, deepeval uses OpenAI (GPT-4) to judge outputs. Every metric evaluation makes an API call that costs money. In a test suite with 15 tests using LLM-as-judge, you make 15+ extra API calls just for evaluation — on top of the calls the app already makes.
+
+| Approach | Cost per test run | Internet required | Consistency |
+|----------|-----------------|-------------------|-------------|
+| OpenAI judge (default) | ~$0.10–$0.50 | Yes | High |
+| Ollama local judge | $0.00 | No (after setup) | High |
+
+### What is Ollama?
+
+Ollama is a tool that lets you run open-source LLMs (like Llama, Mistral, Phi) locally on your machine. It exposes them via a simple REST API so any code that talks to an LLM can use it.
+
+```
+Without Ollama:                    With Ollama:
+  Your tests                         Your tests
+      │                                  │
+      ▼                                  ▼
+  OpenAI API (internet)           Ollama (localhost:11434)
+  cost per call                         │
+                                  Local model (free)
+```
+
+### How `app/local_judge.py` Works
+
+```python
+from deepeval.models.base_model import DeepEvalBaseLLM
+import ollama
+
+class OllamaJudge(DeepEvalBaseLLM):
+
+    def load_model(self):
+        return self.model_name           # tells deepeval which model
+
+    def generate(self, prompt: str) -> Tuple[str, float]:
+        response = ollama.chat(
+            model=self.model_name,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.message.content, 0.0   # (text, cost=0 — it's free)
+
+    def get_model_name(self) -> str:
+        return f"ollama/{self.model_name}"
+```
+
+`DeepEvalBaseLLM` is deepeval's abstract base class for plugging in any LLM. By subclassing it and implementing `generate()`, our local Ollama model becomes a first-class deepeval judge — no other changes needed.
+
+### How the `judge` Fixture Controls Everything
+
+In `conftest.py`:
+```python
+@pytest.fixture(scope="session")
+def judge():
+    backend = os.environ.get("JUDGE_BACKEND", "ollama")   # default: local
+    if backend == "ollama":
+        return OllamaJudge(model=os.environ.get("OLLAMA_MODEL", "llama3.2"))
+    return None   # None → deepeval uses OpenAI
+```
+
+The `judge` fixture is injected into every LLM-as-judge test:
+```python
+def test_capital_city(self, pipeline, judge):
+    metric = AnswerRelevancyMetric(threshold=0.7, model=judge)  # ← plugged in here
+```
+
+Passing `model=judge` overrides deepeval's default. Passing `model=None` falls back to OpenAI.
+
+### Choosing a Judge Model
+
+| Model | Pull command | Size | Speed | Best for |
+|-------|-------------|------|-------|----------|
+| `llama3.2` | `ollama pull llama3.2` | ~2 GB | Fast | General use — recommended |
+| `llama3.2:1b` | `ollama pull llama3.2:1b` | ~1 GB | Fastest | Quick feedback, CI pipelines |
+| `mistral` | `ollama pull mistral` | ~4 GB | Slow | Highest accuracy |
+| `phi3:mini` | `ollama pull phi3:mini` | ~2.3 GB | Medium | Good balance |
+
+**Rule of thumb:** Use `llama3.2` for local development. If you need a quality gate before a release, switch to `mistral` or even OpenAI by setting `JUDGE_BACKEND=openai`.
+
+### Switching Backends via `.env`
+
+```bash
+# Local (default) — free
+JUDGE_BACKEND=ollama
+OLLAMA_MODEL=llama3.2
+
+# Cloud — accurate but costs money
+JUDGE_BACKEND=openai
+OPENAI_API_KEY=sk-...
+```
+
+No code changes needed — just change the env var and re-run.
+
+---
+
+## 7.7 Known Failure: JSONDecodeError with Local Models
+
+This is the most common issue when using local models (like llama3.2) as a deepeval judge. Understanding it is important for SDET interviews.
+
+### What Happens
+
+deepeval sends the judge model a structured prompt like:
+```
+"Rate the relevancy of this answer on a scale of 0–1. Return your answer as JSON: {"score": ..., "reason": "..."}"
+```
+
+A cloud model (GPT-4, Claude) reliably returns:
+```json
+{"score": 0.9, "reason": "The answer directly addresses the question."}
+```
+
+A local model (llama3.2) may return any of these instead:
+
+| Bad Output | Error Thrown |
+|---|---|
+| ` ```json\n{"score": 0.9}\n``` ` | `Expecting value` — newline after fence breaks parser |
+| `{"score": 0.9} Here is my reasoning...` | `Extra data` — text after closing `}` |
+| `{"score": 0.9, "reason": "See \HTTP spec"}` | `Invalid \escape` — `\H` is not a valid JSON escape |
+| `{'score': 0.9, 'reason': 'ok'}` | `Expecting property name` — single quotes are not valid JSON |
+
+### The Two-Layer Fix in `app/local_judge.py`
+
+**Layer 1 — Ollama JSON mode (at the model level):**
+```python
+response = _ollama_lib.chat(
+    model=self.model_name,
+    messages=[...],
+    format="json",      # ← grammar-based constraint; forces valid JSON tokens
+)
+```
+`format="json"` tells Ollama's grammar engine to constrain the model's token sampling so it can only emit tokens that form valid JSON. This prevents most bad outputs at the source.
+
+**Layer 2 — `_extract_json()` response cleaner (as fallback):**
+```python
+text = self._extract_json(response.message.content)
+```
+Even with JSON mode, some edge cases slip through. `_extract_json()` applies these fixes in order:
+1. Strips markdown code fences (` ```json ``` `)
+2. Tries `json.loads()` on the cleaned text
+3. Uses bracket matching to extract just the first complete `{...}` block
+4. Calls `_fix_json_string()` which fixes invalid escapes (`\H` → `\\H`), trailing commas, single quotes
+
+### The `context` vs `retrieval_context` Bug
+
+A separate but related failure came from using the wrong field name in `LLMTestCase`.
+
+deepeval uses two distinct fields:
+- `retrieval_context` — the documents passed to the LLM (for faithfulness/hallucination checks)
+- `context` — does **not** exist as a standard field in `LLMTestCase`
+
+**Wrong (causes `validate_assert_test_inputs` failure):**
+```python
+test_case = LLMTestCase(
+    input=result["input"],
+    actual_output=result["output"],
+    context=[context],             # ← wrong field name
+)
+```
+
+**Correct:**
+```python
+test_case = LLMTestCase(
+    input=result["input"],
+    actual_output=result["output"],
+    retrieval_context=[context],   # ← correct field name
+)
+```
+This also needed to be fixed in `NoHallucinatedNumberMetric` which was reading `test_case.context` — changed to `test_case.retrieval_context`.
+
+### Interview Talking Point
+
+> "We observed JSONDecodeErrors when using llama3.2 as a local judge — the model was adding markdown fences, prose after the JSON, and invalid escape sequences. We fixed this with two layers: Ollama's `format='json'` grammar constraint which prevents bad tokens at the model level, and a post-processing cleaner that extracts and repairs the JSON as a fallback. We also caught a field-name bug — deepeval uses `retrieval_context` not `context` in LLMTestCase, which we discovered by reading the failure logs in the HTML report."
+
+---
+
 ## 8. Test Files — Line by Line Walkthrough
 
 ### `test_answer_relevancy.py` — Full Walkthrough
@@ -624,6 +802,12 @@ These are key things to highlight when discussing this project in an SDET interv
 
 ---
 
+### "How do you manage the cost of LLM-based evaluations?"
+
+> "By default our framework uses a local model via Ollama as the LLM judge instead of OpenAI. We subclassed deepeval's DeepEvalBaseLLM to wrap Ollama's Python library, then injected it into metrics via a pytest fixture controlled by an environment variable. This means every local test run costs nothing for evaluation. We keep OpenAI as an option for pre-release quality gates where higher accuracy is worth the cost — you just flip the JUDGE_BACKEND env var. The app under test still uses Claude's API, but the evaluator is free."
+
+---
+
 ### "How does the framework scale?"
 
 > "The current framework can scale in a few ways: adding more test cases to the JSON dataset without code changes, adding new metrics by subclassing BaseMetric, integrating with CI/CD to run on every deployment, connecting to a real vector database for genuine RAG testing, and adding more metrics like toxicity or bias detection. The architecture keeps the app and evals separate, so we can point the same eval framework at different LLM backends."
@@ -652,6 +836,9 @@ These are key things to highlight when discussing this project in an SDET interv
 | **Fixture** | A pytest mechanism for sharing setup code across multiple tests |
 | **Parametrize** | A pytest feature to run one test function with multiple input sets |
 | **Token** | The unit of text that LLMs process (roughly 0.75 words); API cost is per token |
+| **Ollama** | A tool to run open-source LLMs locally; exposes them via a REST API on localhost |
+| **DeepEvalBaseLLM** | deepeval's abstract base class for plugging in any LLM as a judge |
+| **JUDGE_BACKEND** | Env var that controls whether the judge uses Ollama (local) or OpenAI (cloud) |
 | **SDET** | Software Development Engineer in Test — engineers who build test frameworks and automation |
 
 ---

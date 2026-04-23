@@ -83,7 +83,7 @@ class NoHallucinatedNumberMetric(BaseMetric):
 
     def measure(self, test_case: LLMTestCase) -> float:
         output_numbers = set(re.findall(r"\b\d+(?:\.\d+)?\b", test_case.actual_output))
-        context = test_case.context or []
+        context = test_case.retrieval_context or []
         context_text = " ".join(context) if isinstance(context, list) else (context or "")
         context_numbers = set(re.findall(r"\b\d+(?:\.\d+)?\b", context_text))
 

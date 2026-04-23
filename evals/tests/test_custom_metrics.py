@@ -65,7 +65,7 @@ class TestCustomMetrics:
         test_case = LLMTestCase(
             input=result["input"],
             actual_output=result["output"],
-            context=[context],
+            retrieval_context=[context],
         )
         assert_test(test_case, [metric])
 
@@ -78,7 +78,7 @@ class TestCustomMetrics:
         test_case = LLMTestCase(
             input=result["input"],
             actual_output=result["output"],
-            context=[result["context"]],
+            retrieval_context=[result["context"]],
         )
         assert_test(test_case, [metric])
 

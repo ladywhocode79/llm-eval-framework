@@ -43,10 +43,99 @@ source venv/bin/activate
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Set your API key
+# 3. Configure environment
 cp .env.example .env
-# Edit .env and add your ANTHROPIC_API_KEY
+# Edit .env — set ANTHROPIC_API_KEY (required) and judge settings (see below)
 ```
+
+## Local Judge Setup (Ollama — Recommended)
+
+The LLM-as-judge evaluator runs **locally via Ollama** by default — no OpenAI key or API cost needed.
+
+### Step 1 — Install Ollama
+
+```bash
+# Mac
+brew install ollama
+
+# Or download from https://ollama.com
+```
+
+### Step 2 — Pull a judge model (one-time, ~2 GB)
+
+```bash
+ollama pull llama3.2        # recommended — fast, ~2 GB
+# ollama pull llama3.2:1b   # lightest — ~1 GB, lower quality
+# ollama pull mistral        # best quality — ~4 GB, slower
+```
+
+### Step 3 — Start the Ollama server
+
+```bash
+# Open a new terminal and keep this running during your test session
+ollama serve
+```
+
+> Ollama must be running before executing any LLM-as-judge tests.
+
+### Step 4 — Verify your setup
+
+Run the setup checker before your first test run:
+
+```bash
+python scripts/check_setup.py
+```
+
+Example output (all passing):
+```
+=== LLM Eval Framework — Setup Check ===
+
+  [PASS] Python version — 3.12.0
+  [PASS] anthropic package
+  [PASS] deepeval package
+  [PASS] ollama package
+  [PASS] ANTHROPIC_API_KEY — set (sk-ant-a...)
+  [INFO] JUDGE_BACKEND  — ollama
+  [INFO] OLLAMA_MODEL   — llama3.2
+  [PASS] Ollama server  — running
+  [PASS] Ollama model   — 'llama3.2' is available
+  [PASS] Test dataset file — found
+
+=== All checks passed. You're ready to run tests! ===
+```
+
+### Switch judge backend
+
+In your `.env` file:
+
+```bash
+# Use local Ollama judge (default)
+JUDGE_BACKEND=ollama
+OLLAMA_MODEL=llama3.2
+
+# Use OpenAI judge (requires OPENAI_API_KEY)
+JUDGE_BACKEND=openai
+OPENAI_API_KEY=your-key-here
+```
+
+### Judge Model Comparison
+
+| Model | Size | Speed | Quality | Command |
+|-------|------|-------|---------|---------|
+| `llama3.2` | ~2 GB | Fast | Good | `ollama pull llama3.2` |
+| `llama3.2:1b` | ~1 GB | Fastest | Lower | `ollama pull llama3.2:1b` |
+| `mistral` | ~4 GB | Slow | Best | `ollama pull mistral` |
+| `phi3:mini` | ~2.3 GB | Medium | Good | `ollama pull phi3:mini` |
+
+## Troubleshooting
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `ModuleNotFoundError: No module named 'ollama'` | Package not installed | `pip install -r requirements.txt` |
+| `model 'llama3.2' not found (status code: 404)` | Model not pulled | `ollama pull llama3.2` |
+| `Cannot connect to Ollama server` | Server not running | `ollama serve` (in a new terminal) |
+| `ANTHROPIC_API_KEY` not set | Missing env config | Copy `.env.example` → `.env` and add your key |
+| Any of the above unclear | — | Run `python scripts/check_setup.py` for a guided diagnosis |
 
 ## Running Evals
 
@@ -156,6 +245,33 @@ Reason: Output contains claims not supported by the retrieval context.
 **Full run summary:**
 ```
 ============== 15 passed, 1 failed in 42.3s ==============
+```
+
+---
+
+### HTML Report
+
+An HTML report is generated automatically after every run at:
+```
+reports/report.html
+```
+
+Open it in any browser:
+```bash
+open reports/report.html          # Mac
+xdg-open reports/report.html      # Linux
+start reports/report.html         # Windows
+```
+
+The report is self-contained (single `.html` file — no extra assets needed) and includes:
+- Pass/fail status per test
+- Error messages and deepeval failure reasons
+- Test duration
+- Environment metadata
+
+To save a timestamped copy instead of overwriting each run:
+```bash
+pytest -m eval -v --html=reports/report_$(date +%Y%m%d_%H%M%S).html --self-contained-html
 ```
 
 ---
