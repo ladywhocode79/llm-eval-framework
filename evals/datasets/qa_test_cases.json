@@ -1,0 +1,50 @@
+[
+  {
+    "id": "tc_001",
+    "category": "factual",
+    "question": "What is the capital of France?",
+    "context": "France is a country in Western Europe. Its capital city is Paris, which is also the largest city in the country.",
+    "expected_output": "The capital of France is Paris.",
+    "tags": ["geography", "factual"]
+  },
+  {
+    "id": "tc_002",
+    "category": "factual",
+    "question": "What does HTTP stand for?",
+    "context": "HTTP stands for HyperText Transfer Protocol. It is the foundation of data communication on the World Wide Web.",
+    "expected_output": "HTTP stands for HyperText Transfer Protocol.",
+    "tags": ["technology", "factual"]
+  },
+  {
+    "id": "tc_003",
+    "category": "reasoning",
+    "question": "If a store has 50 apples and sells 18, how many are left?",
+    "context": "",
+    "expected_output": "32 apples are left.",
+    "tags": ["math", "reasoning"]
+  },
+  {
+    "id": "tc_004",
+    "category": "hallucination_check",
+    "question": "What is the boiling point of water in Celsius?",
+    "context": "Water boils at 100 degrees Celsius at standard atmospheric pressure (1 atm).",
+    "expected_output": "Water boils at 100 degrees Celsius.",
+    "tags": ["science", "factual"]
+  },
+  {
+    "id": "tc_005",
+    "category": "out_of_context",
+    "question": "Who won the 2050 World Cup?",
+    "context": "The 2022 FIFA World Cup was held in Qatar. Argentina won the tournament by defeating France in the final.",
+    "expected_output": "The context does not contain information about the 2050 World Cup.",
+    "tags": ["sports", "out_of_context"]
+  },
+  {
+    "id": "tc_006",
+    "category": "summarization",
+    "question": "Summarize the main purpose of REST APIs.",
+    "context": "REST (Representational State Transfer) APIs allow different software systems to communicate over HTTP. They use standard methods like GET, POST, PUT, and DELETE. REST APIs are stateless, meaning each request contains all the information needed to process it.",
+    "expected_output": "REST APIs enable software systems to communicate over HTTP using standard methods, and they are stateless.",
+    "tags": ["technology", "summarization"]
+  }
+]

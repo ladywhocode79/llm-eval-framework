@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+venv/
+.venv/
+reports/*.html
+reports/*.json
+*.log
+llm-eval-framework/LLM_TESTING_GUIDE.md
