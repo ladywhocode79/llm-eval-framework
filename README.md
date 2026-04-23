@@ -66,6 +66,100 @@ pytest -m eval -v -s
 pytest -m eval -k "dataset" -v
 ```
 
+## How to Execute Test Cases
+
+### Prerequisites
+Make sure setup is complete and your virtual environment is active:
+```bash
+cd "/Applications/my apps/llm-eval-framework"
+source venv/bin/activate
+```
+
+---
+
+### Run All Tests
+```bash
+pytest -m eval -v
+```
+
+---
+
+### Run by Test File
+
+| Goal | Command |
+|------|---------|
+| Answer relevancy tests | `pytest evals/tests/test_answer_relevancy.py -v` |
+| Faithfulness / hallucination tests | `pytest evals/tests/test_faithfulness.py -v` |
+| Custom deterministic metric tests | `pytest evals/tests/test_custom_metrics.py -v` |
+
+---
+
+### Run a Single Test
+
+```bash
+# Pattern: pytest <file>::<Class>::<method> -v
+pytest evals/tests/test_answer_relevancy.py::TestAnswerRelevancy::test_capital_city_question -v
+pytest evals/tests/test_faithfulness.py::TestFaithfulness::test_boiling_point_grounded -v
+pytest evals/tests/test_custom_metrics.py::TestCustomMetrics::test_keyword_capital_paris -v
+```
+
+---
+
+### Run by Category / Tag
+
+```bash
+# Run only dataset-driven parametrized tests
+pytest -m eval -k "dataset" -v
+
+# Run only tests related to faithfulness
+pytest -m eval -k "faithful" -v
+
+# Run only keyword and length metric tests
+pytest -m eval -k "keyword or length" -v
+
+# Exclude LLM-as-judge tests (run only deterministic/cheap tests)
+pytest evals/tests/test_custom_metrics.py -v
+```
+
+---
+
+### Run with Detailed Output
+
+```bash
+# Show deepeval scores and reasoning in the terminal
+pytest -m eval -v -s
+
+# Stop after the first failure
+pytest -m eval -v -x
+
+# Show 5 slowest tests
+pytest -m eval -v --durations=5
+```
+
+---
+
+### Expected Output
+
+**Passing test:**
+```
+PASSED evals/tests/test_answer_relevancy.py::TestAnswerRelevancy::test_capital_city_question
+```
+
+**Failing test:**
+```
+FAILED evals/tests/test_faithfulness.py::TestFaithfulness::test_world_cup_out_of_context
+
+AssertionError: FaithfulnessMetric (score: 0.3, threshold: 0.7)
+Reason: Output contains claims not supported by the retrieval context.
+```
+
+**Full run summary:**
+```
+============== 15 passed, 1 failed in 42.3s ==============
+```
+
+---
+
 ## Adding New Test Cases
 
 **Option 1 — Add to the dataset** (`evals/datasets/qa_test_cases.json`):
