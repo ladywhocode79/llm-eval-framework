@@ -7,4 +7,3 @@ venv/
 reports/*.html
 reports/*.json
 *.log
-/Applications/my apps/llm-eval-framework/LLM_TESTING_GUIDE.md
