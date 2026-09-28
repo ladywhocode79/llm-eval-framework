@@ -11,13 +11,15 @@ llm-eval-framework/
 │   └── qa_pipeline.py       # Q&A pipeline (the LLM app being tested)
 ├── evals/
 │   ├── datasets/
-│   │   └── qa_test_cases.json   # Reusable test case dataset
+│   │   ├── qa_test_cases.json   # Reusable test case dataset
+│   │   └── golden_set.json      # Meal-planner agent scenarios (tool calls + expected output)
 │   ├── metrics/
 │   │   └── custom_metrics.py    # Deterministic custom metrics
 │   └── tests/
 │       ├── test_answer_relevancy.py   # LLM-as-judge: relevancy
 │       ├── test_faithfulness.py       # LLM-as-judge: hallucination
-│       └── test_custom_metrics.py     # Deterministic: keyword, length, numbers
+│       ├── test_custom_metrics.py     # Deterministic: keyword, length, numbers
+│       └── test_evals.py              # Meal-planner agent: tool-call schema + Claude-judged faithfulness/relevancy
 ├── conftest.py              # Shared pytest fixtures
 ├── pytest.ini
 └── requirements.txt
@@ -32,6 +34,9 @@ llm-eval-framework/
 | `test_custom_metrics.py` | KeywordPresentMetric | Deterministic |
 | `test_custom_metrics.py` | OutputLengthMetric | Deterministic |
 | `test_custom_metrics.py` | NoHallucinatedNumberMetric | Deterministic |
+| `test_evals.py` | Tool-call schema (Pydantic) | Deterministic |
+| `test_evals.py` | FaithfulnessMetric | LLM-as-judge (Claude) |
+| `test_evals.py` | AnswerRelevancyMetric | LLM-as-judge (Claude) |
 
 ## Setup
 
@@ -127,6 +132,31 @@ OPENAI_API_KEY=your-key-here
 | `mistral` | ~4 GB | Slow | Best | `ollama pull mistral` |
 | `phi3:mini` | ~2.3 GB | Medium | Good | `ollama pull phi3:mini` |
 
+## Meal-Planner Agent Evals (`test_evals.py`)
+
+`test_evals.py` tests a meal-planner agent scenario against `evals/datasets/golden_set.json`, a set of persona-driven scenarios (e.g. dietary restrictions, allergies) each with an expected tool call and expected output. Each scenario runs two layers of checks:
+
+- **Layer A — Tool-call schema (deterministic):** validates `expected_tool_call.args` against the `FetchRecipesArgs` Pydantic schema.
+- **Layer B — Faithfulness & relevancy (LLM-as-judge):** scores `actual_output` against the retrieved context and expected output using `FaithfulnessMetric` and `AnswerRelevancyMetric`.
+
+Unlike the other eval files, this judge calls the **Anthropic API directly** (not Ollama) via a small `ClaudeLLM` wrapper, currently using `claude-haiku-4-5-20251001`. It only requires `ANTHROPIC_API_KEY` in `.env` — no Ollama setup needed.
+
+Add new scenarios by appending an object to `golden_set.json`:
+```json
+{
+  "scenario_id": "MP_XXX_003",
+  "persona": "Short description of the user",
+  "input": "User's request to the meal planner",
+  "retrieved_context": ["Recipe_301: ...", "Recipe_302: ..."],
+  "expected_tool_call": {
+    "name": "fetch_recipes",
+    "args": { "meal_type": "dinner" }
+  },
+  "actual_output": "The agent's actual response",
+  "expected_output": "The ideal response"
+}
+```
+
 ## Troubleshooting
 
 | Error | Cause | Fix |
@@ -147,6 +177,7 @@ pytest -m eval -v
 pytest evals/tests/test_answer_relevancy.py -v
 pytest evals/tests/test_faithfulness.py -v
 pytest evals/tests/test_custom_metrics.py -v
+pytest evals/tests/test_evals.py -v
 
 # Run with detailed deepeval output
 pytest -m eval -v -s
@@ -180,6 +211,7 @@ pytest -m eval -v
 | Answer relevancy tests | `pytest evals/tests/test_answer_relevancy.py -v` |
 | Faithfulness / hallucination tests | `pytest evals/tests/test_faithfulness.py -v` |
 | Custom deterministic metric tests | `pytest evals/tests/test_custom_metrics.py -v` |
+| Meal-planner agent scenarios (golden set) | `pytest evals/tests/test_evals.py -v` |
 
 ---
 
@@ -190,6 +222,9 @@ pytest -m eval -v
 pytest evals/tests/test_answer_relevancy.py::TestAnswerRelevancy::test_capital_city_question -v
 pytest evals/tests/test_faithfulness.py::TestFaithfulness::test_boiling_point_grounded -v
 pytest evals/tests/test_custom_metrics.py::TestCustomMetrics::test_keyword_capital_paris -v
+
+# Meal-planner scenarios are parametrized by scenario_id from golden_set.json
+pytest "evals/tests/test_evals.py::test_meal_planner_scenario[MP_VAL_001]" -v
 ```
 
 ---
