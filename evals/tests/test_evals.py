@@ -38,6 +38,7 @@ class ClaudeLLM(DeepEvalBaseLLM):
         res = self.client.messages.create(
             model=self.model_name,
             max_tokens=1024,
+            temperature=0,
             messages=[{"role": "user", "content": prompt}]
         )
         return res.content[0].text
@@ -46,6 +47,7 @@ class ClaudeLLM(DeepEvalBaseLLM):
         res = await self.async_client.messages.create(
             model=self.model_name,
             max_tokens=1024,
+            temperature=0,
             messages=[{"role": "user", "content": prompt}]
         )
         return res.content[0].text
@@ -113,10 +115,18 @@ def test_meal_planner_scenario(scenario):
 
     # Initialize Metrics with Claude Judge
     faithfulness_metric = FaithfulnessMetric(threshold=0.85, model=claude_judge)
-    relevancy_metric = AnswerRelevancyMetric(threshold=0.80, model=claude_judge)
-    
-    # Include GEval Allergen Safety alongside Faithfulness and Relevancy
-    metrics = [faithfulness_metric, relevancy_metric, allergen_safety_metric]
+
+    # Include GEval Allergen Safety alongside Faithfulness
+    metrics = [faithfulness_metric, allergen_safety_metric]
+
+    # AnswerRelevancyMetric penalizes valid safety refusals (e.g. "I can't
+    # recommend anything safe") for not containing "actionable suggestions."
+    # Scenarios where refusal IS the correct behavior mark expects_refusal in
+    # golden_set.json so relevancy isn't scored against the wrong definition
+    # of a "good" answer. Refusal correctness is still checked by
+    # allergen_safety_metric (criterion 2).
+    if not scenario.get("expects_refusal"):
+        metrics.append(AnswerRelevancyMetric(threshold=0.80, model=claude_judge))
 
     # Evaluate test cases
     result = deepeval_evaluate(
