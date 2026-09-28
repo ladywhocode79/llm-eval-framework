@@ -8,52 +8,19 @@ from deepeval import evaluate as deepeval_evaluate
 from deepeval.evaluate.configs import DisplayConfig
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
 from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric, GEval
-from deepeval.models import DeepEvalBaseLLM
-from anthropic import Anthropic, AsyncAnthropic
+
+from app.judge_factory import get_judge_model
 
 logger = logging.getLogger(__name__)
 
 # 1. Load Environment Variables from .env file
 load_dotenv()
 
-# Verify Anthropic API Key
-if not os.getenv("ANTHROPIC_API_KEY"):
-    raise RuntimeError("ANTHROPIC_API_KEY not found in environment or .env file.")
-
-# 2. Custom Claude Model Wrapper inheriting from DeepEvalBaseLLM
-class ClaudeLLM(DeepEvalBaseLLM):
-    def __init__(self, model_name="claude-haiku-4-5-20251001"):
-        self.model_name = model_name
-        self.api_key = os.getenv("ANTHROPIC_API_KEY")
-        self.client = Anthropic(api_key=self.api_key)
-        self.async_client = AsyncAnthropic(api_key=self.api_key)
-
-    def load_model(self):
-        return self.client
-
-    def get_model_name(self) -> str:
-        return self.model_name
-
-    def generate(self, prompt: str) -> str:
-        res = self.client.messages.create(
-            model=self.model_name,
-            max_tokens=1024,
-            temperature=0,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return res.content[0].text
-
-    async def a_generate(self, prompt: str) -> str:
-        res = await self.async_client.messages.create(
-            model=self.model_name,
-            max_tokens=1024,
-            temperature=0,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return res.content[0].text
-
-# Instantiate the Claude custom model instance
-claude_judge = ClaudeLLM(model_name="claude-haiku-4-5-20251001")
+# 2. Resolve the judge model — prefers local Ollama when available, else
+# falls back to whichever cloud key (GEMINI_API_KEY / ANTHROPIC_API_KEY) is
+# set in .env. Force a specific backend via EVAL_JUDGE_BACKEND=ollama|gemini|anthropic.
+judge_model = get_judge_model()
+logger.info("[judge] Using %s (%s)", type(judge_model).__name__, judge_model.get_model_name())
 
 # 3. Define Tool Call Pydantic Schema for Argument Validation
 class FetchRecipesArgs(BaseModel):
@@ -94,7 +61,7 @@ allergen_safety_metric = GEval(
         LLMTestCaseParams.RETRIEVAL_CONTEXT
     ],
     threshold=0.85,
-    model=claude_judge
+    model=judge_model
 )
 
 # 6. Parametrized Test Execution Across Golden Dataset Scenarios
@@ -116,8 +83,8 @@ def test_meal_planner_scenario(scenario):
         expected_output=scenario["expected_output"]
     )
 
-    # Initialize Metrics with Claude Judge
-    faithfulness_metric = FaithfulnessMetric(threshold=0.85, model=claude_judge)
+    # Initialize Metrics with the resolved judge model
+    faithfulness_metric = FaithfulnessMetric(threshold=0.85, model=judge_model)
     metrics = [faithfulness_metric]
 
     # allergen_safety_metric only makes sense for scenarios that actually
@@ -135,7 +102,7 @@ def test_meal_planner_scenario(scenario):
     # of a "good" answer. Refusal correctness is still checked by
     # allergen_safety_metric (criterion 2).
     if not scenario.get("expects_refusal"):
-        metrics.append(AnswerRelevancyMetric(threshold=0.80, model=claude_judge))
+        metrics.append(AnswerRelevancyMetric(threshold=0.80, model=judge_model))
 
     # Evaluate test cases
     result = deepeval_evaluate(

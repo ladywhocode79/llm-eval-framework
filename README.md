@@ -134,12 +134,21 @@ OPENAI_API_KEY=your-key-here
 
 ## Meal-Planner Agent Evals (`test_evals.py`)
 
-`test_evals.py` tests a meal-planner agent scenario against `evals/datasets/golden_set.json`, a set of persona-driven scenarios (e.g. dietary restrictions, allergies) each with an expected tool call and expected output. Each scenario runs two layers of checks:
+`test_evals.py` tests a meal-planner agent scenario against `evals/datasets/golden_set.json`, a set of persona-driven scenarios (e.g. dietary restrictions, allergies) each with an expected tool call and expected output. Each scenario runs:
 
 - **Layer A — Tool-call schema (deterministic):** validates `expected_tool_call.args` against the `FetchRecipesArgs` Pydantic schema.
-- **Layer B — Faithfulness & relevancy (LLM-as-judge):** scores `actual_output` against the retrieved context and expected output using `FaithfulnessMetric` and `AnswerRelevancyMetric`.
+- **Layer B — LLM-as-judge:** `FaithfulnessMetric` always; `allergen_safety_metric` (a custom `GEval` metric) only for scenarios that declare an allergen; `AnswerRelevancyMetric` for every scenario except ones marked `"expects_refusal": true` (relevancy penalizes a correct safety refusal for lacking "actionable suggestions").
 
-Unlike the other eval files, this judge calls the **Anthropic API directly** (not Ollama) via a small `ClaudeLLM` wrapper, currently using `claude-haiku-4-5-20251001`. It only requires `ANTHROPIC_API_KEY` in `.env` — no Ollama setup needed.
+**Judge model is resolved at runtime, not hardcoded** — see `app/judge_factory.py`. `EVAL_JUDGE_BACKEND` in `.env` controls it (falls back to the shared `JUDGE_BACKEND` if unset):
+
+| Value | Behavior |
+|-------|----------|
+| `auto` (default) | Prefer local Ollama if it's running and the model is pulled; else fall back to `GEMINI_API_KEY`, then `ANTHROPIC_API_KEY` |
+| `ollama` | Force local Ollama (`OLLAMA_MODEL`) |
+| `gemini` | Force Gemini (requires `GEMINI_API_KEY`) |
+| `anthropic` | Force Claude (requires `ANTHROPIC_API_KEY`) |
+
+In practice, prefer local for simple checks, but verify it against your actual rubric before trusting it on safety-critical ones — testing showed llama3.2 hallucinating facts about the retrieval context on the allergen-safety rubric here, so this project's `.env` pins `EVAL_JUDGE_BACKEND=anthropic` for this file while the other eval files stay on the local Ollama judge (see [LLM_TESTING_GUIDE.md §13.6](LLM_TESTING_GUIDE.md#136-challenge-6-making-the-judge-model-agnostic--when-local-isnt-applicable)).
 
 Add new scenarios by appending an object to `golden_set.json`:
 ```json
