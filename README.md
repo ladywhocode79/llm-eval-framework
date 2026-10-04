@@ -148,7 +148,7 @@ OPENAI_API_KEY=your-key-here
 | `gemini` | Force Gemini (requires `GEMINI_API_KEY`) |
 | `anthropic` | Force Claude (requires `ANTHROPIC_API_KEY`) |
 
-In practice, prefer local for simple checks, but verify it against your actual rubric before trusting it on safety-critical ones — testing showed llama3.2 hallucinating facts about the retrieval context on the allergen-safety rubric here, so this project's `.env` pins `EVAL_JUDGE_BACKEND=anthropic` for this file while the other eval files stay on the local Ollama judge (see [LLM_TESTING_GUIDE.md §13.6](LLM_TESTING_GUIDE.md#136-challenge-6-making-the-judge-model-agnostic--when-local-isnt-applicable)).
+In practice, prefer local for simple checks, but verify it against your actual rubric before trusting it on safety-critical ones — testing showed llama3.2 hallucinating facts about the retrieval context on the allergen-safety rubric here, so this project's `.env` pins `EVAL_JUDGE_BACKEND=anthropic` for this file while the other eval files stay on the local Ollama judge (see [case study 6](docs/case-study/06-model-agnostic-judge.md)).
 
 Add new scenarios by appending an object to `golden_set.json`:
 ```json

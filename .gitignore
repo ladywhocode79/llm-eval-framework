@@ -6,4 +6,5 @@ venv/
 .venv/
 reports/*.html
 reports/*.json
+reports/*.xml
 *.log
