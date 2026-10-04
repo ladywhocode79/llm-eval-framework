@@ -75,6 +75,7 @@ allergen_safety_metric = GEval(
 )
 
 # 6. Parametrized Test Execution Across Golden Dataset Scenarios
+@pytest.mark.eval
 @pytest.mark.parametrize("scenario", golden_data, ids=[s["scenario_id"] for s in golden_data])
 def test_meal_planner_scenario(scenario):
     # --- LAYER A: Deterministic Tool Call Schema Assertion ---

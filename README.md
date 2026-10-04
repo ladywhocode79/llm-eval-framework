@@ -8,18 +8,23 @@ A basic LLM testing framework built with [deepeval](https://github.com/confident
 llm-eval-framework/
 ├── app/
 │   ├── llm_client.py        # Claude API wrapper
-│   └── qa_pipeline.py       # Q&A pipeline (the LLM app being tested)
+│   ├── qa_pipeline.py       # Q&A pipeline (the LLM app being tested)
+│   ├── local_judge.py       # Ollama judge wrapper
+│   └── judge_factory.py     # Resolves the judge model at runtime (ollama / gemini / anthropic)
 ├── evals/
 │   ├── datasets/
 │   │   ├── qa_test_cases.json   # Reusable test case dataset
-│   │   └── golden_set.json      # Meal-planner agent scenarios (tool calls + expected output)
+│   │   ├── golden_set.json      # Meal-planner agent scenarios (tool calls + expected output)
+│   │   └── human_annotated_sets.json  # Human-labelled gold set for judge calibration
 │   ├── metrics/
 │   │   └── custom_metrics.py    # Deterministic custom metrics
 │   └── tests/
 │       ├── test_answer_relevancy.py   # LLM-as-judge: relevancy
 │       ├── test_faithfulness.py       # LLM-as-judge: hallucination
 │       ├── test_custom_metrics.py     # Deterministic: keyword, length, numbers
-│       └── test_evals.py              # Meal-planner agent: tool-call schema + Claude-judged faithfulness/relevancy
+│       ├── test_evals.py              # Meal-planner agent: tool-call schema + judged faithfulness/safety/relevancy
+│       └── test_judge_calibration.py  # Judge vs. human agreement (Cohen's Kappa)
+├── docs/                    # Split testing guide + case study (start at LLM_TESTING_GUIDE.md)
 ├── conftest.py              # Shared pytest fixtures
 ├── pytest.ini
 └── requirements.txt
@@ -37,6 +42,10 @@ llm-eval-framework/
 | `test_evals.py` | Tool-call schema (Pydantic) | Deterministic |
 | `test_evals.py` | FaithfulnessMetric | LLM-as-judge (Claude) |
 | `test_evals.py` | AnswerRelevancyMetric | LLM-as-judge (Claude) |
+| `test_evals.py` | allergen_safety_metric (GEval) | LLM-as-judge (Claude) |
+| `test_judge_calibration.py` | Cohen's Kappa vs. human labels | Judge calibration |
+
+For explanations, challenges and learnings, see the guide: [LLM_TESTING_GUIDE.md](LLM_TESTING_GUIDE.md).
 
 ## Setup
 
@@ -166,6 +175,47 @@ Add new scenarios by appending an object to `golden_set.json`:
 }
 ```
 
+## Judge Calibration (`test_judge_calibration.py`)
+
+LLM judges are only useful if they agree with a human. This test measures that: it scores a small human-labelled set with the **same judge, rubric and metrics as `test_evals.py`** and asserts **Cohen's Kappa ≥ 0.80** between the judge's pass/fail and the human label.
+
+```bash
+# Run only calibration (makes live judge calls — costs tokens on cloud judges)
+pytest -m calibration -v -s
+
+# Run the calibration test against a specific judge
+EVAL_JUDGE_BACKEND=anthropic pytest -m calibration -v -s
+```
+
+How it works:
+- **Data:** `evals/datasets/human_annotated_sets.json`, loaded by `load_calibration_dataset()` in `test_evals.py`.
+- **Metrics per case:** `FaithfulnessMetric` + `allergen_safety_metric`, plus `AnswerRelevancyMetric` unless the case has `"expects_refusal": true`. A case is judge-pass (1) only if **all** metrics pass, otherwise 0.
+- **Result:** if κ < 0.80 the failure message lists the disagreeing `scenario_id`s. Read each case's `reasoning` to decide whether the judge or the label is wrong.
+- **Importing `test_evals.py` builds the judge**, so the chosen backend must be reachable (Ollama running, or an API key set).
+- **Not part of `-m eval`.** It carries its own `calibration` marker; plain `pytest` (which uses `testpaths`) will run it too.
+
+Gold-set entry format:
+```json
+{
+  "scenario_id": "CALIB_011",
+  "persona": "Short description of the user",
+  "input": "User's request",
+  "actual_output": "The agent response to judge",
+  "retrieved_context": ["Recipe_...: ..."],
+  "human_label": 1,
+  "expects_refusal": false,
+  "reasoning": "Why a human labelled it 1 (acceptable) or 0 (unacceptable)"
+}
+```
+
+Guidelines for adding cases:
+- Label `1` = response a human would accept, `0` = one they would reject. Always fill in `reasoning`.
+- Set `expects_refusal: true` when refusing is the correct answer (otherwise relevancy will fail it).
+- Keep the set roughly balanced and cover every failure type your metrics should catch. With 10 cases, one disagreement gives κ = 0.80 and two give 0.60, so grow the set before drawing conclusions from small κ differences.
+- Re-run calibration whenever the judge model, rubric, threshold or backend changes.
+
+Details and lessons learned: [docs/case-study/07-judge-calibration.md](docs/case-study/07-judge-calibration.md).
+
 ## Troubleshooting
 
 | Error | Cause | Fix |
@@ -174,6 +224,8 @@ Add new scenarios by appending an object to `golden_set.json`:
 | `model 'llama3.2' not found (status code: 404)` | Model not pulled | `ollama pull llama3.2` |
 | `Cannot connect to Ollama server` | Server not running | `ollama serve` (in a new terminal) |
 | `ANTHROPIC_API_KEY` not set | Missing env config | Copy `.env.example` → `.env` and add your key |
+| Calibration fails with κ < 0.80 | Judge disagrees with human labels | Check the listed `scenario_id`s and their `reasoning`; fix the label, the rubric, or switch judge |
+| Calibration errors at import | Judge backend unreachable (imports `test_evals.py`) | Start Ollama or set the API key for `EVAL_JUDGE_BACKEND` |
 | Any of the above unclear | — | Run `python scripts/check_setup.py` for a guided diagnosis |
 
 ## Running Evals
@@ -187,6 +239,7 @@ pytest evals/tests/test_answer_relevancy.py -v
 pytest evals/tests/test_faithfulness.py -v
 pytest evals/tests/test_custom_metrics.py -v
 pytest evals/tests/test_evals.py -v
+pytest -m calibration -v -s    # judge calibration
 
 # Run with detailed deepeval output
 pytest -m eval -v -s
@@ -200,7 +253,7 @@ pytest -m eval -k "dataset" -v
 ### Prerequisites
 Make sure setup is complete and your virtual environment is active:
 ```bash
-cd "/Applications/my apps/llm-eval-framework"
+cd /Applications/myapps/llm-eval-framework
 source venv/bin/activate
 ```
 
@@ -221,6 +274,7 @@ pytest -m eval -v
 | Faithfulness / hallucination tests | `pytest evals/tests/test_faithfulness.py -v` |
 | Custom deterministic metric tests | `pytest evals/tests/test_custom_metrics.py -v` |
 | Meal-planner agent scenarios (golden set) | `pytest evals/tests/test_evals.py -v` |
+| Judge calibration (Cohen's Kappa) | `pytest -m calibration -v -s` |
 
 ---
 
@@ -345,6 +399,10 @@ def test_my_custom_eval(self, pipeline):
 
 **Option 3 — Add a custom metric** (`evals/metrics/custom_metrics.py`):
 Subclass `BaseMetric` and implement `measure()`, `is_successful()`, and `name`.
+
+## Documentation
+
+The full guide is split by topic under [docs/](docs/), indexed by [LLM_TESTING_GUIDE.md](LLM_TESTING_GUIDE.md): fundamentals, metrics, local judge, running tests, interview points, and a [case study](docs/case-study/README.md) of the challenges hit (including judge calibration).
 
 ## Architecture
 
