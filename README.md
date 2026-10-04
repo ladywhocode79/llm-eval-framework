@@ -23,7 +23,8 @@ llm-eval-framework/
 │       ├── test_faithfulness.py       # LLM-as-judge: hallucination
 │       ├── test_custom_metrics.py     # Deterministic: keyword, length, numbers
 │       ├── test_evals.py              # Meal-planner agent: tool-call schema + judged faithfulness/safety/relevancy
-│       └── test_judge_calibration.py  # Judge vs. human agreement (Cohen's Kappa)
+│       ├── test_judge_calibration.py  # Judge vs. human agreement (Cohen's Kappa)
+│       └── test_model_benchmark.py    # Haiku 4.5 vs Sonnet 5.5 judge: κ, latency, cost
 ├── docs/                    # Split testing guide + case study (start at LLM_TESTING_GUIDE.md)
 ├── conftest.py              # Shared pytest fixtures
 ├── pytest.ini
@@ -44,6 +45,7 @@ llm-eval-framework/
 | `test_evals.py` | AnswerRelevancyMetric | LLM-as-judge (Claude) |
 | `test_evals.py` | allergen_safety_metric (GEval) | LLM-as-judge (Claude) |
 | `test_judge_calibration.py` | Cohen's Kappa vs. human labels | Judge calibration |
+| `test_model_benchmark.py` | κ, latency, cost across judge models | Benchmark |
 
 For explanations, challenges and learnings, see the guide: [LLM_TESTING_GUIDE.md](LLM_TESTING_GUIDE.md).
 
@@ -216,6 +218,24 @@ Guidelines for adding cases:
 
 Details and lessons learned: [docs/case-study/07-judge-calibration.md](docs/case-study/07-judge-calibration.md).
 
+## Judge Model Benchmark (`test_model_benchmark.py`)
+
+Compares two Claude judges (`claude-haiku-4-5-20251001`, `claude-sonnet-5-5`) on the same calibration set and the same `allergen_safety_metric` rubric, and prints a table of Cohen's Kappa, p50/p95 latency, total time and estimated cost.
+
+```bash
+pytest -m benchmark -v -s     # needs ANTHROPIC_API_KEY; makes live calls to both models
+```
+
+Output: the table is printed and also saved to `reports/model_benchmark.md` and `reports/model_benchmark.json` (stdout is not captured in `report.html`).
+
+Notes:
+- First observed run: Haiku 4.5 scored κ = 0.60, so the test failed its 0.80 gate; Sonnet 5.5 numbers weren't captured in that run (the report-saving fix above was added afterwards). Re-run to get both.
+- Cost uses fixed token estimates (350 in / 150 out per case) and an **assumed** Sonnet 5.5 price — verify pricing in the file.
+- `claude-sonnet-5-5` rejects `temperature`; `ClaudeLLM` retries without it, so Sonnet is not pinned to `temperature=0` and results can vary run to run. Re-run before drawing conclusions.
+- It scores only the safety metric, so `CALIB_007` (off-topic) is likely a miss for both models.
+
+Details: [docs/case-study/08-model-benchmark.md](docs/case-study/08-model-benchmark.md).
+
 ## Troubleshooting
 
 | Error | Cause | Fix |
@@ -225,6 +245,7 @@ Details and lessons learned: [docs/case-study/07-judge-calibration.md](docs/case
 | `Cannot connect to Ollama server` | Server not running | `ollama serve` (in a new terminal) |
 | `ANTHROPIC_API_KEY` not set | Missing env config | Copy `.env.example` → `.env` and add your key |
 | Calibration fails with κ < 0.80 | Judge disagrees with human labels | Check the listed `scenario_id`s and their `reasoning`; fix the label, the rubric, or switch judge |
+| `temperature is deprecated for this model` (400) | Newer Claude model rejects `temperature` | Handled automatically by `ClaudeLLM` (retries without it); update `app/judge_factory.py` if you see it elsewhere |
 | Calibration errors at import | Judge backend unreachable (imports `test_evals.py`) | Start Ollama or set the API key for `EVAL_JUDGE_BACKEND` |
 | Any of the above unclear | — | Run `python scripts/check_setup.py` for a guided diagnosis |
 
@@ -275,6 +296,7 @@ pytest -m eval -v
 | Custom deterministic metric tests | `pytest evals/tests/test_custom_metrics.py -v` |
 | Meal-planner agent scenarios (golden set) | `pytest evals/tests/test_evals.py -v` |
 | Judge calibration (Cohen's Kappa) | `pytest -m calibration -v -s` |
+| Judge model benchmark | `pytest -m benchmark -v -s` |
 
 ---
 

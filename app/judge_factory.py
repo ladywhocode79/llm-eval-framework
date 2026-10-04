@@ -21,7 +21,7 @@ Usage:
 
 import os
 
-from anthropic import Anthropic, AsyncAnthropic
+from anthropic import Anthropic, AsyncAnthropic, BadRequestError
 from deepeval.models import DeepEvalBaseLLM
 
 
@@ -31,6 +31,7 @@ class ClaudeLLM(DeepEvalBaseLLM):
         self.api_key = os.getenv("ANTHROPIC_API_KEY")
         self.client = Anthropic(api_key=self.api_key)
         self.async_client = AsyncAnthropic(api_key=self.api_key)
+        self._send_temperature = True
 
     def load_model(self):
         return self.client
@@ -38,22 +39,39 @@ class ClaudeLLM(DeepEvalBaseLLM):
     def get_model_name(self) -> str:
         return self.model_name
 
-    def generate(self, prompt: str) -> str:
-        res = self.client.messages.create(
+    def _kwargs(self, prompt: str) -> dict:
+        kwargs = dict(
             model=self.model_name,
             max_tokens=1024,
-            temperature=0,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
         )
+        # Pin temperature=0 for deterministic judging, unless the model rejected it.
+        if self._send_temperature:
+            kwargs["temperature"] = 0
+        return kwargs
+
+    @staticmethod
+    def _temperature_rejected(err: BadRequestError) -> bool:
+        return "temperature" in str(err).lower()
+
+    def generate(self, prompt: str) -> str:
+        try:
+            res = self.client.messages.create(**self._kwargs(prompt))
+        except BadRequestError as e:
+            if not (self._send_temperature and self._temperature_rejected(e)):
+                raise
+            self._send_temperature = False  # newer models deprecate `temperature`
+            res = self.client.messages.create(**self._kwargs(prompt))
         return res.content[0].text
 
     async def a_generate(self, prompt: str) -> str:
-        res = await self.async_client.messages.create(
-            model=self.model_name,
-            max_tokens=1024,
-            temperature=0,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        try:
+            res = await self.async_client.messages.create(**self._kwargs(prompt))
+        except BadRequestError as e:
+            if not (self._send_temperature and self._temperature_rejected(e)):
+                raise
+            self._send_temperature = False
+            res = await self.async_client.messages.create(**self._kwargs(prompt))
         return res.content[0].text
 
 

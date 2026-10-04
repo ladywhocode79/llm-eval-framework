@@ -27,7 +27,8 @@ See the [case study index](docs/case-study/README.md):
 5. [Turning flaky judges into deterministic bugs](docs/case-study/05-flaky-judges.md)
 6. [Model-agnostic judge](docs/case-study/06-model-agnostic-judge.md)
 7. [Calibrating the judge against human labels](docs/case-study/07-judge-calibration.md)
-8. [Consolidated takeaways](docs/case-study/08-takeaways.md)
+8. [Benchmarking judge models](docs/case-study/08-model-benchmark.md)
+9. [Consolidated takeaways](docs/case-study/09-takeaways.md)
 
 ---
 

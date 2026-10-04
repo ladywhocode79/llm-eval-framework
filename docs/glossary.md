@@ -31,10 +31,7 @@
 | **Cohen's Kappa (κ)** | Agreement statistic between two raters that corrects for chance agreement; ≥ 0.80 is treated as strong agreement here |
 | **Gold Set (Human-Annotated Set)** | A small dataset with human-assigned labels and reasoning, used as ground truth for calibrating a judge |
 | **Tool-Call Schema Validation** | Deterministically validating an agent's function/tool-call arguments (e.g. with Pydantic) instead of trusting free-text output alone |
-
----
-
-*Framework built with: Python · deepeval · Anthropic Claude SDK · pytest*
+| **Judge Benchmark** | Running several judge models over the same gold set and rubric to compare agreement (κ), latency and cost |
 
 ---
 

@@ -15,6 +15,8 @@ res = self.client.messages.create(
 
 This alone turned "sometimes VAR1 fails, sometimes VAR2 fails, seemingly at random" into "VAR1 fails the same way, every single time" — i.e. it converted an unreproducible flake into a reproducible bug. That's the real value of pinning temperature for eval judges: not that it makes the *product* more deterministic, but that it makes your *test failures* debuggable instead of Heisenbugs.
 
+> **Update — newer models reject `temperature`.** `claude-sonnet-5-5` returns a 400 (`temperature is deprecated for this model`). `ClaudeLLM` in `app/judge_factory.py` now tries `temperature=0` first and, on that specific rejection, retries without it and stops sending it. Judges on such models are no longer pinned, so re-run before trusting a single result (see [case 8](08-model-benchmark.md)).
+
 **Root cause #2 — the fix from Challenge 3 wasn't complete.** Once the judge was deterministic, it consistently penalized the salmon recommendation for "failing to disclose" the (non-declared) fish allergen — a subtler flavor of the same judicial-drift problem, now surfacing as a transparency/disclosure concern rather than a direct safety objection. The scope statement said undeclared allergens "must not affect the score," but the judge still treated *non-disclosure* as a separate failure. Fixed by adding an explicit rule plus a worked example the judge could pattern-match against:
 
 ```python

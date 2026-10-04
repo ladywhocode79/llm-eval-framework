@@ -11,7 +11,8 @@ The rest of the guide covers the framework in the abstract. This case study docu
 | 5 | [Turning flaky judges into deterministic bugs](05-flaky-judges.md) | `temperature=0`, complete scope rules, gate metrics per scenario |
 | 6 | [Model-agnostic judge](06-model-agnostic-judge.md) | "Prefer local" must be verified against the rubric |
 | 7 | [Calibrating the judge against human labels](07-judge-calibration.md) | Measure judge-vs-human agreement with Cohen's Kappa; includes the CALIB_007 fix |
-| — | [Consolidated takeaways](08-takeaways.md) | |
+| 8 | [Benchmarking judge models](08-model-benchmark.md) | Compare accuracy (κ), latency and cost; newer models reject `temperature` |
+| — | [Consolidated takeaways](09-takeaways.md) | |
 
 ---
 
