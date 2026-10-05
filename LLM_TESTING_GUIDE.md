@@ -14,7 +14,8 @@ The guide is split by topic so each file is short enough to read in one sitting.
 | 5 | [Test walkthrough and dataset](docs/05-test-walkthrough-and-dataset.md) | Line-by-line test files, parametrization, the QA dataset |
 | 6 | [Running tests and reading results](docs/06-running-and-results.md) | Setup, pytest commands, interpreting failures |
 | 7 | [Interview talking points](docs/07-interview-talking-points.md) | Ready-to-use answers |
-| 8 | [Glossary](docs/glossary.md) | Terms |
+| 8 | [CI/CD pipeline](docs/ci-cd-pipeline.md) | GitHub Actions stages, gates, triggers, secrets, known limitations |
+| 9 | [Glossary](docs/glossary.md) | Terms |
 
 ## Case study: safety-critical meal-planner agent
 

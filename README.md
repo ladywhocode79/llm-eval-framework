@@ -25,6 +25,8 @@ llm-eval-framework/
 │       ├── test_evals.py              # Meal-planner agent: tool-call schema + judged faithfulness/safety/relevancy
 │       ├── test_judge_calibration.py  # Judge vs. human agreement (Cohen's Kappa)
 │       └── test_model_benchmark.py    # Haiku 4.5 vs Sonnet 5.5 judge: κ, latency, cost
+├── .github/workflows/
+│   └── llm_evals_ci.yaml  # CI: calibration gate → parallel scenario evals → reports
 ├── docs/                    # Split testing guide + case study (start at LLM_TESTING_GUIDE.md)
 ├── conftest.py              # Shared pytest fixtures
 ├── pytest.ini
@@ -236,6 +238,18 @@ Notes:
 
 Details: [docs/case-study/08-model-benchmark.md](docs/case-study/08-model-benchmark.md).
 
+## CI/CD (GitHub Actions)
+
+`.github/workflows/llm_evals_ci.yaml` runs on pull requests to `main`/`master` and on pushes to `main`:
+
+1. **Judge calibration gate** — `pytest -m calibration -s`; fails if Cohen's κ < 0.80.
+2. **Scenario evals** (only if stage 1 passes) — `pytest -m evals -n auto`, producing `reports/report.html` and `reports/report.xml`.
+3. **Publish** — uploads the `llm-eval-reports` artifact (14 days) and writes a PR job summary.
+
+Setup: add `ANTHROPIC_API_KEY` under repo **Settings → Secrets and variables → Actions**. The runner has no Ollama, so the judge resolves to Claude. Fork PRs don't get secrets and will fail. `benchmark` tests are deliberately not run in CI.
+
+Full details, limitations and local reproduction: [docs/ci-cd-pipeline.md](docs/ci-cd-pipeline.md).
+
 ## Troubleshooting
 
 | Error | Cause | Fix |
@@ -244,6 +258,7 @@ Details: [docs/case-study/08-model-benchmark.md](docs/case-study/08-model-benchm
 | `model 'llama3.2' not found (status code: 404)` | Model not pulled | `ollama pull llama3.2` |
 | `Cannot connect to Ollama server` | Server not running | `ollama serve` (in a new terminal) |
 | `ANTHROPIC_API_KEY` not set | Missing env config | Copy `.env.example` → `.env` and add your key |
+| CI Stage 2 exits with "no tests collected" (code 5) | Marker in `-m` matches no test | Tests must carry the `evals` marker; check `--collect-only -m evals` |
 | Calibration fails with κ < 0.80 | Judge disagrees with human labels | Check the listed `scenario_id`s and their `reasoning`; fix the label, the rubric, or switch judge |
 | `temperature is deprecated for this model` (400) | Newer Claude model rejects `temperature` | Handled automatically by `ClaudeLLM` (retries without it); update `app/judge_factory.py` if you see it elsewhere |
 | Calibration errors at import | Judge backend unreachable (imports `test_evals.py`) | Start Ollama or set the API key for `EVAL_JUDGE_BACKEND` |
@@ -254,6 +269,9 @@ Details: [docs/case-study/08-model-benchmark.md](docs/case-study/08-model-benchm
 ```bash
 # Run all eval tests
 pytest -m eval -v
+
+# Chained run, same order as CI: calibration first, scenarios only if it passes
+pytest -m calibration && pytest -m evals -n auto
 
 # Run a specific test file
 pytest evals/tests/test_answer_relevancy.py -v
@@ -427,6 +445,32 @@ Subclass `BaseMetric` and implement `measure()`, `is_successful()`, and `name`.
 The full guide is split by topic under [docs/](docs/), indexed by [LLM_TESTING_GUIDE.md](LLM_TESTING_GUIDE.md): fundamentals, metrics, local judge, running tests, interview points, and a [case study](docs/case-study/README.md) of the challenges hit (including judge calibration).
 
 ## Architecture
+
+### Two-layer testing for the meal-planner agent
+
+Cheap deterministic checks run first; paid LLM judging only happens if they pass.
+
+```
+  Scenario (golden_set.json)
+            │
+            ▼
+  ┌───────────────────────────────────┐
+  │ LAYER A — Deterministic           │
+  │ Pydantic tool-call schema check   │
+  └─────────┬───────────────┬─────────┘
+         pass              fail ──► stop (no LLM cost)
+            ▼
+  ┌───────────────────────────────────┐
+  │ LAYER B — LLM-as-judge (deepeval) │
+  │ Faithfulness                      │
+  │ allergen_safety_metric (GEval)    │  only if an allergen is declared
+  │ AnswerRelevancy                   │  skipped if expects_refusal
+  └───────────────────────────────────┘
+```
+
+Before any of this is trusted in CI, the judge itself is checked against human labels (Cohen's κ ≥ 0.80) — see [Judge Calibration](#judge-calibration-test_judge_calibrationpy).
+
+### Single Q&A pipeline
 
 ```
 Test Case (question + context)

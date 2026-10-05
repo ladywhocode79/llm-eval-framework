@@ -17,7 +17,7 @@ pytest -m calibration -v      # judge-vs-human agreement only
 pytest -m "not calibration"   # everything else
 ```
 
-**Why Cohen's Kappa and not plain accuracy?** Accuracy ignores agreement that happens by chance. With balanced binary labels a coin-flip judge already "agrees" 50% of the time, so κ rescales agreement to remove that: κ = (observed − chance) / (1 − chance). Rule of thumb: ≥ 0.80 is strong agreement, 0.60–0.80 moderate.
+**Why Cohen's Kappa and not plain accuracy?** Accuracy ignores agreement that happens by chance. With balanced binary labels a coin-flip judge already "agrees" 50% of the time, so κ rescales agreement to remove that: κ = (P<sub>o</sub> − P<sub>e</sub>) / (1 − P<sub>e</sub>), where P<sub>o</sub> is the observed agreement and P<sub>e</sub> is the agreement expected by chance. Worked example from this gold set (5 labels of 1, 5 of 0): one disagreement gives P<sub>o</sub> = 0.9 and P<sub>e</sub> = 0.5, so κ = (0.9 − 0.5) / (1 − 0.5) = 0.80. Rule of thumb: ≥ 0.80 is strong agreement, 0.60–0.80 moderate.
 
 **What the gold set deliberately covers** (each case mirrors a challenge above):
 
