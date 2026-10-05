@@ -1,7 +1,7 @@
 # LLM Testing Framework — Complete Guide
 ### For SDETs New to LLM Evaluation
 
-The guide is split by topic so each file is short enough to read in one sitting. Start at the top if you are new to LLM testing; jump straight to the case study if you want the challenges and learnings.
+The guide is split by topic so each file is short enough to read in one sitting. Start at the top if you are new to LLM testing. The meal-planner case study, calibration and CI/CD have moved to a separate repo (see below).
 
 ## Core guide
 
@@ -14,22 +14,11 @@ The guide is split by topic so each file is short enough to read in one sitting.
 | 5 | [Test walkthrough and dataset](docs/05-test-walkthrough-and-dataset.md) | Line-by-line test files, parametrization, the QA dataset |
 | 6 | [Running tests and reading results](docs/06-running-and-results.md) | Setup, pytest commands, interpreting failures |
 | 7 | [Interview talking points](docs/07-interview-talking-points.md) | Ready-to-use answers |
-| 8 | [CI/CD pipeline](docs/ci-cd-pipeline.md) | GitHub Actions stages, gates, triggers, secrets, known limitations |
-| 9 | [Glossary](docs/glossary.md) | Terms |
+| 8 | [Glossary](docs/glossary.md) | Terms |
 
-## Case study: safety-critical meal-planner agent
+## Case study, calibration and CI/CD (moved)
 
-See the [case study index](docs/case-study/README.md):
-
-1. [Faithfulness passing an unverifiable safety claim](docs/case-study/01-faithfulness-gap.md)
-2. [Context variants for RAG stages](docs/case-study/02-context-variants.md)
-3. [Judicial drift in GEval](docs/case-study/03-judicial-drift.md)
-4. [Relevancy penalizing a valid refusal](docs/case-study/04-refusal-vs-relevancy.md)
-5. [Turning flaky judges into deterministic bugs](docs/case-study/05-flaky-judges.md)
-6. [Model-agnostic judge](docs/case-study/06-model-agnostic-judge.md)
-7. [Calibrating the judge against human labels](docs/case-study/07-judge-calibration.md)
-8. [Benchmarking judge models](docs/case-study/08-model-benchmark.md)
-9. [Consolidated takeaways](docs/case-study/09-takeaways.md)
+The meal-planner case study (challenges and learnings), judge calibration, model benchmark and the GitHub Actions pipeline now live in the **[ai-agent-eval-suite](https://github.com/ladywhocode79/ai-agent-eval-suite)** repo — see its [docs](https://github.com/ladywhocode79/ai-agent-eval-suite/tree/main/docs).
 
 ---
 

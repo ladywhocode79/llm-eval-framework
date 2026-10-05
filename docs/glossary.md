@@ -24,14 +24,6 @@
 | **DeepEvalBaseLLM** | deepeval's abstract base class for plugging in any LLM as a judge |
 | **JUDGE_BACKEND** | Env var that controls whether the judge uses Ollama (local) or OpenAI (cloud) |
 | **SDET** | Software Development Engineer in Test — engineers who build test frameworks and automation |
-| **GEval** | deepeval's framework for building custom, natural-language-criteria LLM-as-judge metrics |
-| **Judicial Drift / Over-generalization** | When an LLM judge ignores your specific evaluation criteria and falls back on its own broad commonsense notion of "quality" or "safety" |
-| **Hallucination of Omission** | An unverifiable, additive claim an LLM makes that isn't contradicted by context but also isn't supported by it — missed by contradiction-based metrics like Faithfulness |
-| **Judge Calibration** | Measuring how closely an LLM judge's verdicts match human expert labels on a gold set, before trusting it as a test oracle |
-| **Cohen's Kappa (κ)** | Agreement statistic between two raters that corrects for chance agreement; ≥ 0.80 is treated as strong agreement here |
-| **Gold Set (Human-Annotated Set)** | A small dataset with human-assigned labels and reasoning, used as ground truth for calibrating a judge |
-| **Tool-Call Schema Validation** | Deterministically validating an agent's function/tool-call arguments (e.g. with Pydantic) instead of trusting free-text output alone |
-| **Judge Benchmark** | Running several judge models over the same gold set and rubric to compare agreement (κ), latency and cost |
 
 ---
 
